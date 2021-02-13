@@ -552,23 +552,34 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 			StartupStep contextRefresh = this.applicationStartup.start("spring.context.refresh");
 
 			// Prepare this context for refreshing.
+			// 主要是为了从我们的Environment配置文件当中获取到一些我们的SpringBean所需要的一些数据而做使用的
 			prepareRefresh();
 
 			// Tell the subclass to refresh the internal bean factory.
+			// 然后我们进入到了BeanFactory的获取阶段
 			ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();
 
 			// Prepare the bean factory for use in this context.
+			// 并且做了一些BeanFactory的prepare，主要包含了我们会去做一些Aware的组装，包含ApplicationContextAware，以及我们是否需要去忽略我们对接口的一些依赖，
+			// 以防止在从事的过程中报错，已经我们会注册我们对一些其他Bean的依赖，包括EventPublisher以及ApplicationContext
 			prepareBeanFactory(beanFactory);
 
 			try {
 				// Allows post-processing of the bean factory in context subclasses.
+				// 我们会去做一些后置处理的一个beanFactory的初始化操作
 				postProcessBeanFactory(beanFactory);
 
 				StartupStep beanPostProcess = this.applicationStartup.start("spring.context.beans.post-process");
 				// Invoke factory processors registered as beans in the context.
+				// 然后去做BeanDefinition的一个context的注入
+				// 核心的方法在这个invokeBeanFactoryPostProcessors方法当中
+				// SpringBoot项目中 -> CachingMetadataReaderFactoryPostProcessor -> postProcessBeanDefinitionRegistry
+				// 内部会去做register操作，将BeanDefinitionRegistry获取出来做一些BeanDefinition的Register
+				// 主要的一些Registry的方式还是要通过配置文件去做依赖注入的一个管理
 				invokeBeanFactoryPostProcessors(beanFactory);
 
 				// Register bean processors that intercept bean creation.
+				// 完成了BeanDefinition组装之后我们需要将这些BeanDefinition注册到我们的BeanFactory当中
 				registerBeanPostProcessors(beanFactory);
 				beanPostProcess.end();
 
@@ -579,15 +590,24 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 				initApplicationEventMulticaster();
 
 				// Initialize other special beans in specific context subclasses.
+				// SpringBoot项目中 -> ServletWebServerApplicationContext -> onRefresh
+				// 在内部我们可以看到除了它本身自己的onRefresh之外还有一个最重要的createWebServer()，这样时候就简单明了了
+				// 为什么我们在SpringBoot容器加载启动的时候会创建一个内嵌的tomcat容器，本质上来说就是在这里创建的，
+				// 我们需要在onRefresh的时候创建我们本地的一个webApplicationServer并且通过servlet的一个context将它对应的
+				// 这个信息startup出来，在createWebServer()中这段逻辑就是用来通过我们配置文件的当中xxxx端口的信息去创建了我们的一个
+				// webApplicationServer
 				onRefresh();
 
 				// Check for listener beans and register them.
 				registerListeners();
 
 				// Instantiate all remaining (non-lazy-init) singletons.
+				// 会去做singletons Bean的Factory的一个Bean的加载
+				// 也就是我们真正的Bean实例化操作会在这里完成
 				finishBeanFactoryInitialization(beanFactory);
 
 				// Last step: publish corresponding event.
+				// 完成了Bean的初始化，最后publish出来了一个finishRefresh这样一个操作，主要是publish了一些event内容，并启动Tomcat容器
 				finishRefresh();
 			}
 
@@ -746,6 +766,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 	 * Instantiate and invoke all registered BeanFactoryPostProcessor beans,
 	 * respecting explicit order if given.
 	 * <p>Must be called before singleton instantiation.
+	 * ---
 	 */
 	protected void invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory beanFactory) {
 		PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(beanFactory, getBeanFactoryPostProcessors());
@@ -910,6 +931,8 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 		// Initialize LoadTimeWeaverAware beans early to allow for registering their transformers early.
 		String[] weaverAwareNames = beanFactory.getBeanNamesForType(LoadTimeWeaverAware.class, false, false);
 		for (String weaverAwareName : weaverAwareNames) {
+			// 这个getBean方法是帮助我们去做AbstractBeanFactory -> doGetBean这样的方式，在这个对应的BeanFactory的doGetBean会去判断当前的Bean是否在容器当中存在，
+			// 如果不存在的话会去做init，如果说存在的话那就直接get出来对应的这个Bean，非常符合对应的懒加载机制这样的策略
 			getBean(weaverAwareName);
 		}
 
@@ -937,6 +960,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 		initLifecycleProcessor();
 
 		// Propagate refresh to lifecycle processor first.
+		// 在这里启动Tomcat容器
 		getLifecycleProcessor().onRefresh();
 
 		// Publish the final event.
